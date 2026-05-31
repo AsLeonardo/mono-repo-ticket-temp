@@ -14,7 +14,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.ticket.ticket.application.event.CancelTicketUseCase;
-import com.ticket.ticket.application.event.CreateTicketUseCase;
+import com.ticket.ticket.application.event.CreatePayedTicketUseCase;
 import com.ticket.ticket.application.event.ViewActiveTicketUseCase;
 import com.ticket.ticket.application.event.dto.CreateTicketCommand;
 import com.ticket.ticket.application.event.dto.TicketResponse;
@@ -24,20 +24,20 @@ import com.ticket.ticket.domain.event.ID;
 @RequestMapping("/tickets")
 public class TicketController {
 
-  private final CreateTicketUseCase createTicketUseCase;
+  private final CreatePayedTicketUseCase createPayedTicketUseCase;
   private final CancelTicketUseCase cancelTicketUseCase;
   private final ViewActiveTicketUseCase viewActiveTicketUseCase;
 
-  public TicketController(CreateTicketUseCase createTicketUseCase, CancelTicketUseCase cancelTicketUseCase,
+  public TicketController(CreatePayedTicketUseCase createTicketUseCase, CancelTicketUseCase cancelTicketUseCase,
       ViewActiveTicketUseCase view) {
-    this.createTicketUseCase = createTicketUseCase;
+    this.createPayedTicketUseCase = createTicketUseCase;
     this.cancelTicketUseCase = cancelTicketUseCase;
     this.viewActiveTicketUseCase = view;
   }
 
   @PostMapping
-  public ResponseEntity<TicketResponse> create(@RequestBody CreateTicketCommand command) {
-    TicketResponse response = createTicketUseCase.execute(command);
+  public ResponseEntity<TicketResponse> createPayedTicket(@RequestBody CreateTicketCommand command) {
+    TicketResponse response = createPayedTicketUseCase.execute(command);
     return ResponseEntity.status(HttpStatus.CREATED).body(response);
   }
 

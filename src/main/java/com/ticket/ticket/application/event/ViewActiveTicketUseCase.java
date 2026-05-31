@@ -1,6 +1,5 @@
 package com.ticket.ticket.application.event;
 
-import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Stream;
 
@@ -31,7 +30,6 @@ public class ViewActiveTicketUseCase {
     Stream<Ticket> stream = foundTickets.size() > 1000
         ? foundTickets.parallelStream()
         : foundTickets.stream();
-    List<Ticket> activeTickets = stream.filter(ticket -> ticket.getSituation() == TicketState.ATIVO).toList();
-    return activeTickets.stream().map(TicketResponse::from).toList();
+    return stream.map(TicketResponse::from).toList();
   }
 }
