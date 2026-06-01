@@ -5,7 +5,7 @@
 | `API `                 | Spring Cloud Gateway                     | all traffic via :8000              |
 | `Multiple instances`   | event-service-1/-2                       | both healthy, both serve           |
 | `Async communication`  | RabbitMQ topic exchange                  | order.confirmed -> notification    |
-| `Concurrency control`  | atomic DB UPDATE                         | 2nd reserve on qty=1 → 409         |
+| `Concurrency control`  | atomic DB UPDATE                         | 2nd reserve on qty=1 -> 409        |
 | `Resilience`           | Resilience4j CB+retry                    | breaker opens at failureRate=1.0   |
 | `Idempotency`          | gateway key + consumer PK + status guard | kill-test: one charge/ticket/email |
 | `Observability`        | JSON logs + Prometheus + Grafana         | dashboard panels + structured logs |
