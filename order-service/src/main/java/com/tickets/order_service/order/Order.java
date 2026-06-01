@@ -8,7 +8,7 @@ import java.time.LocalDateTime;
 public class Order {
 
     public enum Status {
-        PENDING,      // reservation held, awaiting payment
+        PENDING,      // reservation held, wait payment
         CONFIRMED,    // payment confirmed
         EXPIRED,      // TTL elapsed, reservation released
         FAILED        // payment failed

@@ -1,12 +1,12 @@
-package com.tickets.order_service.order;
+package com.tickets.notification_service;
 
 import org.springframework.amqp.core.*;
-import org.springframework.amqp.rabbit.connection.ConnectionFactory;
-import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.amqp.support.converter.Jackson2JsonMessageConverter;
 import org.springframework.amqp.support.converter.MessageConverter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+
+import java.util.Map;
 
 @Configuration
 public class RabbitConfig {
@@ -15,12 +15,17 @@ public class RabbitConfig {
     public static final String ORDER_CONFIRMED_QUEUE = "order.confirmed.queue";
     public static final String ORDER_CONFIRMED_ROUTING_KEY = "order.confirmed";
 
-    public static final String DLX = "tickets.dlx";
     public static final String DLQ = "order.confirmed.dlq";
+    public static final String DLX = "tickets.dlx";
 
     @Bean
     public TopicExchange ticketsExchange() {
         return new TopicExchange(EXCHANGE);
+    }
+
+    @Bean
+    public DirectExchange deadLetterExchange() {
+        return new DirectExchange(DLX);
     }
 
     @Bean
@@ -32,22 +37,26 @@ public class RabbitConfig {
     }
 
     @Bean
+    public Queue deadLetterQueue() {
+        return QueueBuilder.durable(DLQ).build();
+    }
+
+    @Bean
     public Binding orderConfirmedBinding(Queue orderConfirmedQueue, TopicExchange ticketsExchange) {
         return BindingBuilder.bind(orderConfirmedQueue)
                 .to(ticketsExchange)
                 .with(ORDER_CONFIRMED_ROUTING_KEY);
     }
 
-    // JSON serialization instead of Java serialization
     @Bean
-    public MessageConverter jsonMessageConverter() {
-        return new Jackson2JsonMessageConverter();
+    public Binding deadLetterBinding(Queue deadLetterQueue, DirectExchange deadLetterExchange) {
+        return BindingBuilder.bind(deadLetterQueue)
+                .to(deadLetterExchange)
+                .with(DLQ);
     }
 
     @Bean
-    public RabbitTemplate rabbitTemplate(ConnectionFactory cf, MessageConverter converter) {
-        RabbitTemplate template = new RabbitTemplate(cf);
-        template.setMessageConverter(converter);
-        return template;
+    public MessageConverter jsonMessageConverter() {
+        return new Jackson2JsonMessageConverter();
     }
 }

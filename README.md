@@ -60,6 +60,7 @@ curl -X POST http://localhost:8081/orders/2/pay -H "Content-Type: application/js
 # → {"message":"Payment processed"}
 
 ###
+
 ```
 ticket-system
 ├─ docker-compose.yml
@@ -90,9 +91,7 @@ ticket-system
 │  │  │  │           └─ HealthController.java
 │  │  │  └─ resources
 │  │  │     ├─ application.properties
-│  │  │     ├─ application.yml
-│  │  │     ├─ static
-│  │  │     └─ templates
+│  │  │     └─ application.yml
 │  │  └─ test
 │  │     └─ java
 │  │        └─ com
@@ -125,6 +124,58 @@ ticket-system
 │           └─ tickets
 │              └─ event_service
 │                 └─ EventServiceApplicationTests.class
+├─ notification-service
+│  ├─ .mvn
+│  │  └─ wrapper
+│  │     └─ maven-wrapper.properties
+│  ├─ Dockerfile
+│  ├─ HELP.md
+│  ├─ mvnw
+│  ├─ mvnw.cmd
+│  ├─ pom.xml
+│  ├─ src
+│  │  ├─ main
+│  │  │  ├─ java
+│  │  │  │  └─ com
+│  │  │  │     └─ tickets
+│  │  │  │        └─ notification_service
+│  │  │  │           ├─ NotificationConsumer.java
+│  │  │  │           ├─ NotificationController.java
+│  │  │  │           ├─ NotificationServiceApplication.java
+│  │  │  │           ├─ OrderConfirmedEvent.java
+│  │  │  │           ├─ RabbitConfig.java
+│  │  │  │           ├─ SentEmail.java
+│  │  │  │           └─ SentEmailRepository.java
+│  │  │  └─ resources
+│  │  │     ├─ application.properties
+│  │  │     ├─ application.yml
+│  │  │     ├─ static
+│  │  │     └─ templates
+│  │  └─ test
+│  │     └─ java
+│  │        └─ com
+│  │           └─ tickets
+│  │              └─ notification_service
+│  │                 └─ NotificationServiceApplicationTests.java
+│  └─ target
+│     ├─ classes
+│     │  ├─ application.properties
+│     │  ├─ application.yml
+│     │  └─ com
+│     │     └─ tickets
+│     │        └─ notification_service
+│     │           ├─ NotificationConsumer.class
+│     │           ├─ NotificationController.class
+│     │           ├─ NotificationServiceApplication.class
+│     │           ├─ OrderConfirmedEvent.class
+│     │           ├─ RabbitConfig.class
+│     │           ├─ SentEmail.class
+│     │           └─ SentEmailRepository.class
+│     └─ test-classes
+│        └─ com
+│           └─ tickets
+│              └─ notification_service
+│                 └─ NotificationServiceApplicationTests.class
 ├─ order-service
 │  ├─ .mvn
 │  │  └─ wrapper
@@ -146,9 +197,13 @@ ticket-system
 │  │  │  │           │  ├─ EventServiceClient.java
 │  │  │  │           │  ├─ InsufficientInventoryException.java
 │  │  │  │           │  ├─ Order.java
+│  │  │  │           │  ├─ OrderConfirmedEvent.java
 │  │  │  │           │  ├─ OrderController.java
 │  │  │  │           │  ├─ OrderRepository.java
-│  │  │  │           │  └─ OrderService.java
+│  │  │  │           │  ├─ OrderService.java
+│  │  │  │           │  ├─ PaymentDeclinedException.java
+│  │  │  │           │  ├─ PaymentService.java
+│  │  │  │           │  └─ RabbitConfig.java
 │  │  │  │           ├─ OrderServiceApplication.java
 │  │  │  │           └─ user
 │  │  │  │              ├─ User.java
@@ -157,9 +212,7 @@ ticket-system
 │  │  │  │              └─ UserService.java
 │  │  │  └─ resources
 │  │  │     ├─ application.properties
-│  │  │     ├─ application.yml
-│  │  │     ├─ static
-│  │  │     └─ templates
+│  │  │     └─ application.yml
 │  │  └─ test
 │  │     └─ java
 │  │        └─ com
@@ -180,9 +233,13 @@ ticket-system
 │     │           │  ├─ InsufficientInventoryException.class
 │     │           │  ├─ Order$Status.class
 │     │           │  ├─ Order.class
+│     │           │  ├─ OrderConfirmedEvent.class
 │     │           │  ├─ OrderController.class
 │     │           │  ├─ OrderRepository.class
-│     │           │  └─ OrderService.class
+│     │           │  ├─ OrderService.class
+│     │           │  ├─ PaymentDeclinedException.class
+│     │           │  ├─ PaymentService.class
+│     │           │  └─ RabbitConfig.class
 │     │           ├─ OrderServiceApplication.class
 │     │           └─ user
 │     │              ├─ User.class
@@ -198,8 +255,57 @@ ticket-system
 │           └─ tickets
 │              └─ order_service
 │                 └─ OrderServiceApplicationTests.class
+├─ payment-gateway-mock
+│  ├─ .mvn
+│  │  └─ wrapper
+│  │     └─ maven-wrapper.properties
+│  ├─ Dockerfile
+│  ├─ HELP.md
+│  ├─ mvnw
+│  ├─ mvnw.cmd
+│  ├─ pom.xml
+│  ├─ src
+│  │  ├─ main
+│  │  │  ├─ java
+│  │  │  │  └─ com
+│  │  │  │     └─ tickets
+│  │  │  │        └─ payment_gateway_mock
+│  │  │  │           ├─ AdminController.java
+│  │  │  │           ├─ ChargeController.java
+│  │  │  │           ├─ ChargeRequest.java
+│  │  │  │           ├─ ChargeResponse.java
+│  │  │  │           ├─ GatewayConfig.java
+│  │  │  │           └─ PaymentGatewayMockApplication.java
+│  │  │  └─ resources
+│  │  │     ├─ application.properties
+│  │  │     └─ application.yml
+│  │  └─ test
+│  │     └─ java
+│  │        └─ com
+│  │           └─ tickets
+│  │              └─ payment_gateway_mock
+│  │                 └─ PaymentGatewayMockApplicationTests.java
+│  └─ target
+│     ├─ classes
+│     │  ├─ application.properties
+│     │  ├─ application.yml
+│     │  └─ com
+│     │     └─ tickets
+│     │        └─ payment_gateway_mock
+│     │           ├─ AdminController.class
+│     │           ├─ ChargeController.class
+│     │           ├─ ChargeRequest.class
+│     │           ├─ ChargeResponse.class
+│     │           ├─ GatewayConfig.class
+│     │           └─ PaymentGatewayMockApplication.class
+│     └─ test-classes
+│        └─ com
+│           └─ tickets
+│              └─ payment_gateway_mock
+│                 └─ PaymentGatewayMockApplicationTests.class
 ├─ prometheus
 │  └─ prometheus.yml
-└─ README.md
+├─ README.md
+└─ test.md
 
 ```

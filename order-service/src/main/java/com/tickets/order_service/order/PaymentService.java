@@ -64,7 +64,7 @@ public PaymentService(
                 orderRepository.save(order);
                 log.info("Payment approved for order {}", orderId);
 
-                // publish async event — fire and forget into the broker
+                // publish async event into the broker
                 OrderConfirmedEvent event = new OrderConfirmedEvent(
                     order.getId(), order.getUserId(), order.getEventId());
                 rabbitTemplate.convertAndSend(
@@ -80,11 +80,11 @@ public PaymentService(
 
         } catch (HttpServerErrorException ex) {
             log.error("Gateway technical failure for order {}: {}", orderId, ex.getMessage());
-            throw ex; // let Retry handle it
+            throw ex; // let Retry handle
         }
     }
 
-    // called when circuit breaker is OPEN — gateway is down, fail fast
+    // called when circuit breaker is OPEN, gateway is down, fail fast
     public void chargeFallback(Long orderId, String paymentMethod, BigDecimal amount, Exception ex) {
         log.error("Circuit breaker OPEN — fallback for order {}. Cause: {}", orderId, ex.getMessage());
         throw new RuntimeException("Payment service unavailable. Try again later.");

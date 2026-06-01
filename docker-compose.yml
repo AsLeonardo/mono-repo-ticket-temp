@@ -153,3 +153,32 @@ services:
       timeout: 5s
       retries: 10
       start_period: 30s
+
+  notification-service:
+      build:
+        context: ./notification-service
+        dockerfile: Dockerfile
+      container_name: notification-service
+      environment:
+        DB_HOST: postgres
+        DB_NAME: tickets
+        DB_USER: tickets
+        DB_PASS: tickets
+        RABBITMQ_HOST: rabbitmq
+        RABBITMQ_USER: tickets
+        RABBITMQ_PASS: tickets
+      ports:
+        - "8082:8082"
+      networks:
+        - tickets-net
+      depends_on:
+        postgres:
+          condition: service_healthy
+        rabbitmq:
+          condition: service_healthy
+      healthcheck:
+        test: ["CMD-SHELL", "curl -f http://localhost:8082/actuator/health || exit 1"]
+        interval: 10s
+        timeout: 5s
+        retries: 10
+        start_period: 40s

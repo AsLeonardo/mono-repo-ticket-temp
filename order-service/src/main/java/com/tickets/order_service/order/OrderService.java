@@ -29,10 +29,10 @@ public class OrderService {
 
     @Transactional
     public Order createOrder(Long userId, Long eventId) {
-        // 1. call event-service to atomically decrement inventory
+        // 1 call event-service to atomically decrement inventory
         eventServiceClient.reserveTicket(eventId);
 
-        // 2. only if that succeeded, persist the order
+        // 2 only if that succeeded, persist the order
         LocalDateTime now = LocalDateTime.now();
         Order order = new Order(userId, eventId, now, now.plusMinutes(ttlMinutes));
         Order saved = orderRepository.save(order);
@@ -52,8 +52,8 @@ public class OrderService {
         return orderRepository.findAll();
     }
 
-    // runs every 60 seconds — finds PENDING orders past their TTL and marks them EXPIRED
-    // NOTE: this does NOT release inventory yet — that's step 5 when RabbitMQ is in place
+    // runs every 60 seconds finding PENDING orders past their TTL and marks them EXPIRED
+    // this does NOT release inventory yet, that's only when RabbitMQ is set
     @Scheduled(fixedDelay = 60_000)
     @Transactional
     public void expireStaleReservations() {

@@ -27,7 +27,7 @@ public class ChargeController {
     @PostMapping
     public ResponseEntity<ChargeResponse> charge(@RequestBody ChargeRequest req) throws InterruptedException {
 
-        // idempotency — same key returns same result
+        // idempotency = same key returns same result
         if (req.idempotencyKey() != null && idempotencyStore.containsKey(req.idempotencyKey())) {
             log.info("Idempotent hit for key {}", req.idempotencyKey());
             return ResponseEntity.ok(idempotencyStore.get(req.idempotencyKey()));
@@ -43,7 +43,7 @@ public class ChargeController {
                     .body(new ChargeResponse(null, "ERROR", req.idempotencyKey()));
         }
 
-        // simulate business decline (distinct from technical failure)
+        // simulate business decline (different from technical failure)
         if (Math.random() < config.declineRate) {
             log.warn("Simulating business decline for order {}", req.orderId());
             ChargeResponse declined = new ChargeResponse(
