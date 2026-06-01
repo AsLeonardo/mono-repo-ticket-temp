@@ -2,6 +2,9 @@ package com.tickets.order_service.order;
 
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import io.github.resilience4j.retry.annotation.Retry;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
@@ -24,19 +27,26 @@ public class PaymentService {
     private final RestTemplate restTemplate;
     private final OrderRepository orderRepository;
 
+    private final Counter ticketsSoldCounter;
+
     @Value("${payment-gateway.url}")
     private String gatewayUrl;
 
-private final RabbitTemplate rabbitTemplate;
+    private final RabbitTemplate rabbitTemplate;
 
-public PaymentService(
-    RestTemplate restTemplate,
-    OrderRepository orderRepository,
-    RabbitTemplate rabbitTemplate) {
-    this.restTemplate = restTemplate;
-    this.orderRepository = orderRepository;
-    this.rabbitTemplate = rabbitTemplate;
-}
+    public PaymentService(
+        RestTemplate restTemplate,
+        OrderRepository orderRepository,
+        RabbitTemplate rabbitTemplate,
+        MeterRegistry meterRegistry) {
+        this.restTemplate = restTemplate;
+        this.orderRepository = orderRepository;
+        this.rabbitTemplate = rabbitTemplate;
+
+        this.ticketsSoldCounter = Counter.builder("tickets_sold_total")
+                .description("Total tickets successfully sold")
+                .register(meterRegistry);
+    }
 
     @CircuitBreaker(name = "gateway", fallbackMethod = "chargeFallback")
     @Retry(name = "gateway")
@@ -77,6 +87,7 @@ public PaymentService(
                     RabbitConfig.ORDER_CONFIRMED_ROUTING_KEY,
                     event);
                 log.info("Published order.confirmed for order {}", orderId);
+                ticketsSoldCounter.increment();
             } else if ("DECLINED".equals(status)) {
                 order.setStatus(Order.Status.FAILED);
                 orderRepository.save(order);
