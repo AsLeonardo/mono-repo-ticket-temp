@@ -42,7 +42,12 @@ public PaymentService(
     @Retry(name = "gateway")
     public void processPayment(Long orderId, String paymentMethod, BigDecimal amount) {
         Order order = orderRepository.findById(orderId)
-                .orElseThrow(() -> new RuntimeException("Order not found: " + orderId));
+                .orElseThrow(() -> new OrderNotFoundException(orderId));
+
+        // entry guard: only PENDING orders can be paid
+        if (order.getStatus() != Order.Status.PENDING) {
+            throw new InvalidOrderStateException(orderId, order.getStatus());
+        }
 
         String idempotencyKey = "order-" + orderId;
 
@@ -85,8 +90,15 @@ public PaymentService(
     }
 
     // called when circuit breaker is OPEN, gateway is down, fail fast
-    public void chargeFallback(Long orderId, String paymentMethod, BigDecimal amount, Exception ex) {
-        log.error("Circuit breaker OPEN — fallback for order {}. Cause: {}", orderId, ex.getMessage());
-        throw new RuntimeException("Payment service unavailable. Try again later.");
+    public void chargeFallback(Long orderId, String paymentMethod, BigDecimal amount, Throwable ex) {
+    // business exceptions are not gateway failures let them propagate as be it
+    if (ex instanceof PaymentDeclinedException
+            || ex instanceof OrderNotFoundException
+            || ex instanceof InvalidOrderStateException) {
+        throw (RuntimeException) ex;
+    }
+    log.error("Circuit breaker fallback for order {}: gateway unavailable. Cause: {}",
+            orderId, ex.getMessage());
+    throw new GatewayUnavailableException(orderId);
     }
 }
