@@ -2,7 +2,7 @@
 | Requirement            | Mechanism                                | Verification                       |
 | ---------------------- | ---------------------------------------- | ---------------------------------- |
 | `Load balancer`        | Nginx round-robin                        | /whoami alternates instances       |
-| `API `                 | Spring Cloud Gateway                     | all traffic via :8000              |
+| `API`                 | Spring Cloud Gateway                     | all traffic via :8000              |
 | `Multiple instances`   | event-service-1/-2                       | both healthy, both serve           |
 | `Async communication`  | RabbitMQ topic exchange                  | order.confirmed -> notification    |
 | `Concurrency control`  | atomic DB UPDATE                         | 2nd reserve on qty=1 -> 409        |
