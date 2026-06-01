@@ -26,3 +26,9 @@ management:
   endpoint:
     health:
       show-details: always
+    metrics:
+      export: 
+        enabled: true
+      distribution:
+        percentiles-histogram:
+          http.server.requests: true
