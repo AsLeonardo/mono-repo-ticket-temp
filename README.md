@@ -16,7 +16,7 @@
 
 ### 1. Prove load balancing:
 `curl http://localhost:8000/whoami` \
- `http://localhost:8000/whoami`
+`curl http://localhost:8000/whoami`
 
 ### 2. Register a user:
 `curl -X POST http://localhost:8000/users -H "Content-Type: application/json" -d "{\"email\":\"leo@test.com\",\"name\":\"Leonardo\"}"`
