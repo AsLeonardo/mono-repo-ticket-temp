@@ -62,6 +62,38 @@ curl -X POST http://localhost:8081/orders/2/pay -H "Content-Type: application/js
 ###
 
 ```
+Set up inventory:
+bashcurl -X POST http://localhost:8000/events -H "Content-Type: application/json" -d "{\"name\":\"All Methods\",\"eventDate\":\"2026-12-20T20:00:00\",\"price\":90.00,\"availableQuantity\":10}"
+Credit card — synchronous, confirmed immediately:
+bashcurl -X POST http://localhost:8000/orders -H "Content-Type: application/json" -d "{\"userId\":1,\"eventId\":1}"
+curl -X POST http://localhost:8000/orders/1/pay -H "Content-Type: application/json" -d "{\"paymentMethod\":\"CREDIT_CARD\",\"amount\":90.00}"
+curl http://localhost:8000/orders/1
+# → CONFIRMED right away
+PIX — asynchronous, PENDING then CONFIRMED via webhook:
+bashcurl -X POST http://localhost:8000/orders -H "Content-Type: application/json" -d "{\"userId\":1,\"eventId\":1}"
+curl -X POST http://localhost:8000/orders/2/pay -H "Content-Type: application/json" -d "{\"paymentMethod\":\"PIX\",\"amount\":90.00}"
+curl http://localhost:8000/orders/2
+# → PENDING immediately
+# wait ~5 seconds (the webhook delay)
+curl http://localhost:8000/orders/2
+# → CONFIRMED — the gateway called back
+Boleto — same async path:
+bashcurl -X POST http://localhost:8000/orders -H "Content-Type: application/json" -d "{\"userId\":1,\"eventId\":1}"
+curl -X POST http://localhost:8000/orders/3/pay -H "Content-Type: application/json" -d "{\"paymentMethod\":\"BOLETO\",\"amount\":90.00}"
+# PENDING now, CONFIRMED after the webhook fires
+PIX expiry demo (user never pays the PIX → it expires):
+bashcurl -X POST http://localhost:8090/admin/mode -H "Content-Type: application/json" -d "{\"confirmRate\":0.0}"
+curl -X POST http://localhost:8000/orders -H "Content-Type: application/json" -d "{\"userId\":1,\"eventId\":1}"
+curl -X POST http://localhost:8000/orders/4/pay -H "Content-Type: application/json" -d "{\"paymentMethod\":\"PIX\",\"amount\":90.00}"
+# wait ~5s
+curl http://localhost:8000/orders/4
+# → EXPIRED — the webhook came back EXPIRED
+curl -X POST http://localhost:8090/admin/mode -H "Content-Type: application/json" -d "{\"confirmRate\":1.0}"
+Watch docker compose logs -f payment-gateway-mock during the PIX calls — you'll see Webhook delivered for order X → CONFIRMED. That callback landing on your /webhooks/payment-callback is the second async integration, now real.
+```
+
+
+```
 ticket-system
 ├─ docker-compose.yml
 ├─ event-service
