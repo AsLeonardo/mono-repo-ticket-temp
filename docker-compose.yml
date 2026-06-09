@@ -195,6 +195,10 @@ services:
       timeout: 5s
       retries: 10
       start_period: 30s
+    environment:
+      ORDER_SERVICE_URL: http://order-service:8081
+    depends_on:
+      - order-service
 
   notification-service:
       build:
