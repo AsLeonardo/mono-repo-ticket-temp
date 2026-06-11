@@ -18,7 +18,7 @@ public class UserController {
 
     @PostMapping
     public ResponseEntity<User> register(@RequestBody Map<String, String> body) {
-        User user = service.register(body.get("email"), body.get("name"));
+        User user = service.register(body.get("email"), body.get("name"), body.get("password"));
         return ResponseEntity.status(HttpStatus.CREATED).body(user);
     }
 

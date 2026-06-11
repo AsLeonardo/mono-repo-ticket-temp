@@ -72,3 +72,7 @@ resilience4j:
 
 payment-gateway:
   url: ${PAYMENT_GATEWAY_URL:http://localhost:8090}
+
+jwt:
+  secret: ${JWT_SECRET:c0c08bac4d23ad90d896132081729e44aedcc619f94906e7b16a7624bc791d41}
+  expiration-ms: 3600000

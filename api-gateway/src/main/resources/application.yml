@@ -4,26 +4,12 @@ server:
 spring:
   application:
     name: api-gateway
-  cloud:
-    gateway:
-      routes:
-        - id: event-service
-          uri: http://nginx-lb:8080      # routes to the LB, not a single instance
-          predicates:
-            - Path=/events/**,/whoami
 
-        - id: order-service
-          uri: http://order-service:8081
-          predicates:
-            - Path=/orders/**,/users/**
-
-        - id: notification-service
-          uri: http://notification-service:8082
-          predicates:
-            - Path=/notifications/**
+jwt:
+  secret: ${JWT_SECRET:c0c08bac4d23ad90d896132081729e44aedcc619f94906e7b16a7624bc791d41}
 
 management:
   endpoints:
     web:
       exposure:
-        include: health,info,prometheus
+        include: health,info,gateway,prometheus

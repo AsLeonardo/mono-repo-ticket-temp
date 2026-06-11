@@ -21,8 +21,9 @@ public class OrderController {
     }
 
     @PostMapping
-    public ResponseEntity<Order> create(@RequestBody CreateOrderRequest req) {
-        Order order = service.createOrder(req.userId(), req.eventId());
+    public ResponseEntity<Order> create(@RequestHeader("X-User-Id") Long userId,
+                                        @RequestBody CreateOrderRequest req) {
+        Order order = service.createOrder(userId, req.eventId());
         return ResponseEntity.status(HttpStatus.CREATED).body(order);
     }
 
