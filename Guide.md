@@ -188,11 +188,14 @@ The system uses JWT bearer tokens. You log in once, capture the token, and reuse
 
 **Windows `cmd.exe`:**
 
-```cmd
-:: store a token in an environment variable
-set USER_TOKEN=eyJhbGciOiJIUzUxMiJ9....
 
-:: use it (cmd expands %VAR%)
+- store a token in an environment variable
+```cmd
+set USER_TOKEN=eyJhbGciOiJIUzUxMiJ9....
+```
+
+- use it (cmd expands %VAR%)
+```cmd
 curl http://localhost:8000/orders/1 -H "Authorization: Bearer %USER_TOKEN%"
 ```
 
@@ -200,6 +203,8 @@ curl http://localhost:8000/orders/1 -H "Authorization: Bearer %USER_TOKEN%"
 
 ```powershell
 $USER_TOKEN = "eyJhbGc..."
+```
+```powershell
 curl http://localhost:8000/orders/1 -H "Authorization: Bearer $USER_TOKEN"
 ```
 
@@ -207,6 +212,8 @@ curl http://localhost:8000/orders/1 -H "Authorization: Bearer $USER_TOKEN"
 
 ```bash
 USER_TOKEN="eyJhbGc..."
+```
+```bash
 curl http://localhost:8000/orders/1 -H "Authorization: Bearer $USER_TOKEN"
 ```
 
@@ -237,88 +244,110 @@ signature doesn't verify**; that's exactly what the gateway checks.
 This is the canonical end-to-end run. Execute top to bottom on a fresh stack. Each
 step notes the expected response.
 
+
+#### 0. Bring the stack up (separate terminal, leave it running) 
 ```cmd
-::  0. Bring the stack up (separate terminal, leave it running) 
 docker compose up --build -d
+```
+```cmd
 docker compose ps
-::   wait until every row shows "healthy"
 ```
+- wait until every row shows "healthy"
 
+
+
+#### 1. Register a user (PUBLIC; no token needed) 
 ```cmd
-::  1. Register a user (PUBLIC; no token needed) 
 curl -X POST http://localhost:8000/users -H "Content-Type: application/json" -d "{\"email\":\"leo@test.com\",\"name\":\"Leonardo\",\"password\":\"pass123\"}"
-::   EXPECT 201: {"email":"leo@test.com","name":"Leonardo","role":"USER","id":...}
-::   NOTE: role is forced to USER; you cannot self-register as ADMIN
 ```
+- EXPECT 201: {"email":"leo@test.com","name":"Leonardo","role":"USER","id":...}
+- NOTE: role is forced to USER; you cannot self-register as ADMIN
 
+#### 2. Log in as the user, capture the token 
 ```cmd
-::  2. Log in as the user, capture the token 
 curl -X POST http://localhost:8000/auth/login -H "Content-Type: application/json" -d "{\"email\":\"leo@test.com\",\"password\":\"pass123\"}"
-::   EXPECT 200: {"token":"eyJ..."}
+```
+- EXPECT 200: {"token":"eyJ..."}
+```cmd
 set USER_TOKEN=<paste the token value here>
 ```
 
+#### 3. Log in as the SEEDED admin, capture that token 
 ```cmd
-::  3. Log in as the SEEDED admin, capture that token 
 curl -X POST http://localhost:8000/auth/login -H "Content-Type: application/json" -d "{\"email\":\"admin@tickets.com\",\"password\":\"admin123\"}"
-::   EXPECT 200: {"token":"eyJ..."}
+```
+- EXPECT 200: {"token":"eyJ..."}
+```cmd
 set ADMIN_TOKEN=<paste the admin token value here>
 ```
 
+#### 4. Admin creates an event (ADMIN-only) 
 ```cmd
-::  4. Admin creates an event (ADMIN-only) 
 curl -X POST http://localhost:8000/events -H "Content-Type: application/json" -H "Authorization: Bearer %ADMIN_TOKEN%" -d "{\"name\":\"Show\",\"eventDate\":\"2026-12-01T20:00:00\",\"price\":100.00,\"availableQuantity\":5}"
-::   EXPECT 201: {"name":"Show",...,"availableQuantity":5,"id":1}
 ```
+- EXPECT 201: {"name":"Show",...,"availableQuantity":5,"id":1}
 
+#### 5. Confirm the event id the DB actually assigned 
 ```cmd
-::  5. Confirm the event id the DB actually assigned 
 curl http://localhost:8000/events -H "Authorization: Bearer %USER_TOKEN%"
-::   EXPECT 200: [ { ... "id":1 } ]   <- use this id below
 ```
+- EXPECT 200: [ { ... "id":1 } ]   <- use this id below
 
+
+#### 6. Admin adjusts quantity, then price (the other two admin ops) 
 ```cmd
-::  6. Admin adjusts quantity, then price (the other two admin ops) 
 curl -X PATCH http://localhost:8000/events/1/quantity -H "Content-Type: application/json" -H "Authorization: Bearer %ADMIN_TOKEN%" -d "{\"quantity\":10}"
+```
+```cmd
 curl -X PATCH http://localhost:8000/events/1/price    -H "Content-Type: application/json" -H "Authorization: Bearer %ADMIN_TOKEN%" -d "{\"price\":120.00}"
-::   EXPECT 200 each, with the field updated in the returned object
 ```
+- EXPECT 200 each, with the field updated in the returned object
 
+
+
+#### 7. User creates an order (reserves a ticket). Note: NO userId in body 
 ```cmd
-::  7. User creates an order (reserves a ticket). Note: NO userId in body 
 curl -X POST http://localhost:8000/orders -H "Content-Type: application/json" -H "Authorization: Bearer %USER_TOKEN%" -d "{\"eventId\":1}"
-::   EXPECT 201: {"userId":2,"eventId":1,...,"status":"PENDING","paymentMethod":null,"id":1}
-::   userId came from the TOKEN, not the body
 ```
+- EXPECT 201: {"userId":2,"eventId":1,...,"status":"PENDING","paymentMethod":null,"id":1}
+- userId came from the TOKEN, not the body
 
+
+#### 8a. Pay by credit card (SYNCHRONOUS; confirmed immediately) 
 ```cmd
-::  8a. Pay by credit card (SYNCHRONOUS; confirmed immediately) 
 curl -X POST http://localhost:8000/orders/1/pay -H "Content-Type: application/json" -H "Authorization: Bearer %USER_TOKEN%" -d "{\"paymentMethod\":\"CREDIT_CARD\",\"amount\":120.00}"
-::   EXPECT 200: {"orderStatus":"CONFIRMED","message":"..."}
 ```
+- EXPECT 200: {"orderStatus":"CONFIRMED","message":"..."}
 
+
+#### 8b. (Alternative) Pay by PIX (ASYNCHRONOUS; pending, then webhook confirms) 
+- First make a second order to test the async path:
 ```cmd
-::  8b. (Alternative) Pay by PIX (ASYNCHRONOUS; pending, then webhook confirms) 
-:: First make a second order to test the async path:
 curl -X POST http://localhost:8000/orders -H "Content-Type: application/json" -H "Authorization: Bearer %USER_TOKEN%" -d "{\"eventId\":1}"
+```
+```cmd
 curl -X POST http://localhost:8000/orders/2/pay -H "Content-Type: application/json" -H "Authorization: Bearer %USER_TOKEN%" -d "{\"paymentMethod\":\"PIX\",\"amount\":120.00}"
-::   EXPECT 200: {"orderStatus":"PENDING","message":"PIX gerado; aguardando confirmação..."}
-::   ...wait ~5 seconds (webhook delay)...
+```
+- EXPECT 200: {"orderStatus":"PENDING","message":"PIX gerado; aguardando confirmação..."}
+- ...wait ~5 seconds (webhook delay)...
+```cmd
 curl http://localhost:8000/orders/2 -H "Authorization: Bearer %USER_TOKEN%"
-::   EXPECT 200: {... "status":"CONFIRMED"}   <- the gateway called back
 ```
+- EXPECT 200: {... "status":"CONFIRMED"}   <- the gateway called back
 
+
+#### 9. Confirm the async notification was produced (RabbitMQ -> consumer) 
 ```cmd
-::  9. Confirm the async notification was produced (RabbitMQ -> consumer) 
 curl http://localhost:8000/notifications -H "Authorization: Bearer %USER_TOKEN%"
-::   EXPECT 200: [ {"orderId":1,"userId":2,"sentAt":"..."}, ... ]
 ```
+- EXPECT 200: [ {"orderId":1,"userId":2,"sentAt":"..."}, ... ]
 
+
+#### 10. Read a single order back 
 ```cmd
-::  10. Read a single order back 
 curl http://localhost:8000/orders/1 -H "Authorization: Bearer %USER_TOKEN%"
-::   EXPECT 200: {... "status":"CONFIRMED"}
 ```
+- EXPECT 200: {... "status":"CONFIRMED"}
 
 If all ten steps pass, the entire critical path works: auth -> role-gated admin CRUD ->
 reservation -> both payment paths -> async notification.
@@ -474,11 +503,13 @@ curl http://localhost:8000/whoami -H "Authorization: Bearer %USER_TOKEN%"
 
 ### 8.16 Payment-mock admin (DIRECT; port 8090, NO token, NOT via gateway)
 
-```cmd
-:: read current knobs
-curl http://localhost:8090/admin/mode
 
-:: set knobs (any subset of fields)
+- read current knobs
+```cmd
+curl http://localhost:8090/admin/mode
+```
+- set knobs (any subset of fields)
+```cmd
 curl -X POST http://localhost:8090/admin/mode -H "Content-Type: application/json" -d "{\"failureRate\":1.0,\"latencyMs\":100,\"declineRate\":0.0,\"webhookDelayMs\":5000,\"confirmRate\":1.0}"
 ```
 
@@ -492,59 +523,59 @@ callback delay), `confirmRate` (0–1, fraction of PIX/boleto that CONFIRM vs EX
 
 These prove the admin/user boundary. The **failure** is the success here.
 
+#### 9.1 No token at all -> 401 Unauthorized
 ```cmd
-:: 9.1 No token at all -> 401 Unauthorized
 curl -i http://localhost:8000/orders/1
-::   EXPECT: HTTP/1.1 401 Unauthorized  (empty body)
 ```
+- EXPECT: HTTP/1.1 401 Unauthorized  (empty body)
 
+#### 9.2 Garbage / tampered token -> 401
 ```cmd
-:: 9.2 Garbage / tampered token -> 401
 curl -i http://localhost:8000/events -H "Authorization: Bearer not.a.real.token"
-::   EXPECT: HTTP/1.1 401 Unauthorized
 ```
+- EXPECT: HTTP/1.1 401 Unauthorized
 
+#### 9.3 Missing "Bearer " prefix -> 401
 ```cmd
-:: 9.3 Missing "Bearer " prefix -> 401
 curl -i http://localhost:8000/events -H "Authorization: %USER_TOKEN%"
-::   EXPECT: HTTP/1.1 401 Unauthorized
 ```
+- EXPECT: HTTP/1.1 401 Unauthorized
 
+#### 9.4 USER attempts to CREATE an event -> 403 Forbidden
 ```cmd
-:: 9.4 USER attempts to CREATE an event -> 403 Forbidden
 curl -i -X POST http://localhost:8000/events -H "Content-Type: application/json" -H "Authorization: Bearer %USER_TOKEN%" -d "{\"name\":\"Hack\",\"eventDate\":\"2026-12-01T20:00:00\",\"price\":50.00,\"availableQuantity\":5}"
-::   EXPECT: HTTP/1.1 403 Forbidden  (empty body; rejected at the gateway)
 ```
+- EXPECT: HTTP/1.1 403 Forbidden  (empty body; rejected at the gateway)
 
+#### 9.5 USER attempts to CHANGE quantity -> 403
 ```cmd
-:: 9.5 USER attempts to CHANGE quantity -> 403
 curl -i -X PATCH http://localhost:8000/events/1/quantity -H "Content-Type: application/json" -H "Authorization: Bearer %USER_TOKEN%" -d "{\"quantity\":999}"
-::   EXPECT: HTTP/1.1 403 Forbidden
 ```
+- EXPECT: HTTP/1.1 403 Forbidden
 
+#### 9.6 USER attempts to CHANGE price -> 403
 ```cmd
-:: 9.6 USER attempts to CHANGE price -> 403
 curl -i -X PATCH http://localhost:8000/events/1/price -H "Content-Type: application/json" -H "Authorization: Bearer %USER_TOKEN%" -d "{\"price\":1.00}"
-::   EXPECT: HTTP/1.1 403 Forbidden
 ```
+- EXPECT: HTTP/1.1 403 Forbidden
 
+#### 9.7 ADMIN can do the user action too (buying is open to any authenticated account)
 ```cmd
-:: 9.7 ADMIN can do the user action too (buying is open to any authenticated account)
 curl -X POST http://localhost:8000/orders -H "Content-Type: application/json" -H "Authorization: Bearer %ADMIN_TOKEN%" -d "{\"eventId\":1}"
-::   EXPECT: 201; admins are authenticated accounts; the gate only restricts admin-ONLY ops
 ```
+- EXPECT: 201; admins are authenticated accounts; the gate only restricts admin-ONLY ops
 
+#### 9.8 Expired token -> 401 (wait >1h, or just observe after expiry)
 ```cmd
-:: 9.8 Expired token -> 401 (wait >1h, or just observe after expiry)
 curl -i http://localhost:8000/orders -H "Authorization: Bearer %USER_TOKEN%"
-::   EXPECT after expiry: HTTP/1.1 401 Unauthorized -> log in again
 ```
+- EXPECT after expiry: HTTP/1.1 401 Unauthorized -> log in again
 
+#### 9.9 Self-registration cannot escalate to ADMIN (role is ignored if sent)
 ```cmd
-:: 9.9 Self-registration cannot escalate to ADMIN (role is ignored if sent)
 curl -X POST http://localhost:8000/users -H "Content-Type: application/json" -d "{\"email\":\"sneaky@x.com\",\"name\":\"X\",\"password\":\"p\",\"role\":\"ADMIN\"}"
-::   EXPECT 201 with role STILL "USER"; the server forces USER and ignores the field
 ```
+- EXPECT 201 with role STILL "USER"; the server forces USER and ignores the field
 
 | Scenario                                 | Expected status   |
 | ---------------------------------------- | ----------------- |
@@ -572,49 +603,71 @@ curl -X POST http://localhost:8090/admin/mode -H "Content-Type: application/json
 | `PIX`         | Asynchronous | `PENDING`                 | `CONFIRMED`/`EXPIRED` | Gateway webhook ~5 s later  |
 | `BOLETO`      | Asynchronous | `PENDING`                 | `CONFIRMED`/`EXPIRED` | Gateway webhook ~5 s later  |
 
+#### 10.1 CREDIT_CARD; confirmed inline
 ```cmd
-:: 10.1 CREDIT_CARD; confirmed inline
 curl -X POST http://localhost:8000/orders -H "Content-Type: application/json" -H "Authorization: Bearer %USER_TOKEN%" -d "{\"eventId\":1}"
+```
+```cmd
 curl -X POST http://localhost:8000/orders/<id>/pay -H "Content-Type: application/json" -H "Authorization: Bearer %USER_TOKEN%" -d "{\"paymentMethod\":\"CREDIT_CARD\",\"amount\":120.00}"
-::   EXPECT immediately: {"orderStatus":"CONFIRMED",...}
 ```
+- EXPECT immediately: {"orderStatus":"CONFIRMED",...}
 
+#### 10.2 PIX; pending then confirmed
 ```cmd
-:: 10.2 PIX; pending then confirmed
 curl -X POST http://localhost:8000/orders -H "Content-Type: application/json" -H "Authorization: Bearer %USER_TOKEN%" -d "{\"eventId\":1}"
+```
+```cmd
 curl -X POST http://localhost:8000/orders/<id>/pay -H "Content-Type: application/json" -H "Authorization: Bearer %USER_TOKEN%" -d "{\"paymentMethod\":\"PIX\",\"amount\":120.00}"
-::   EXPECT now: {"orderStatus":"PENDING",...}
-::   wait 5s, then:
-curl http://localhost:8000/orders/<id> -H "Authorization: Bearer %USER_TOKEN%"
-::   EXPECT: status CONFIRMED
 ```
-
+- EXPECT now: {"orderStatus":"PENDING",...}
+- wait 5s, then:
 ```cmd
-:: 10.3 BOLETO; identical async path
+curl http://localhost:8000/orders/<id> -H "Authorization: Bearer %USER_TOKEN%"
+```
+- EXPECT: status CONFIRMED
+
+#### 10.3 BOLETO; identical async path
+```cmd
 curl -X POST http://localhost:8000/orders -H "Content-Type: application/json" -H "Authorization: Bearer %USER_TOKEN%" -d "{\"eventId\":1}"
+```
+```cmd
 curl -X POST http://localhost:8000/orders/<id>/pay -H "Content-Type: application/json" -H "Authorization: Bearer %USER_TOKEN%" -d "{\"paymentMethod\":\"BOLETO\",\"amount\":120.00}"
-::   PENDING now, CONFIRMED after webhook
 ```
+- PENDING now, CONFIRMED after webhook
 
+#### 10.4 PIX that EXPIRES (user never pays); set confirmRate to 0
 ```cmd
-:: 10.4 PIX that EXPIRES (user never pays); set confirmRate to 0
 curl -X POST http://localhost:8090/admin/mode -H "Content-Type: application/json" -d "{\"confirmRate\":0.0}"
+```
+```cmd
 curl -X POST http://localhost:8000/orders -H "Content-Type: application/json" -H "Authorization: Bearer %USER_TOKEN%" -d "{\"eventId\":1}"
+```
+```cmd
 curl -X POST http://localhost:8000/orders/<id>/pay -H "Content-Type: application/json" -H "Authorization: Bearer %USER_TOKEN%" -d "{\"paymentMethod\":\"PIX\",\"amount\":120.00}"
-::   wait 5s
+```
+- wait 5s
+```cmd
 curl http://localhost:8000/orders/<id> -H "Authorization: Bearer %USER_TOKEN%"
-::   EXPECT: status EXPIRED   <- webhook returned EXPIRED
-:: restore:
+```
+- EXPECT: status EXPIRED   <- webhook returned EXPIRED
+- restore:
+```cmd
 curl -X POST http://localhost:8090/admin/mode -H "Content-Type: application/json" -d "{\"confirmRate\":1.0}"
 ```
 
+#### 10.5 CREDIT_CARD that is DECLINED (business decline, NOT retried)
 ```cmd
-:: 10.5 CREDIT_CARD that is DECLINED (business decline, NOT retried)
 curl -X POST http://localhost:8090/admin/mode -H "Content-Type: application/json" -d "{\"declineRate\":1.0}"
+```
+```cmd
 curl -X POST http://localhost:8000/orders -H "Content-Type: application/json" -H "Authorization: Bearer %USER_TOKEN%" -d "{\"eventId\":1}"
+```
+```cmd
 curl -i -X POST http://localhost:8000/orders/<id>/pay -H "Content-Type: application/json" -H "Authorization: Bearer %USER_TOKEN%" -d "{\"paymentMethod\":\"CREDIT_CARD\",\"amount\":120.00}"
-::   EXPECT: an error/declined response; the order goes FAILED; it is NOT retried (declines are non-retryable)
-:: restore:
+```
+- EXPECT: an error/declined response; the order goes FAILED; it is NOT retried (declines are non-retryable)
+- restore:
+```cmd
 curl -X POST http://localhost:8090/admin/mode -H "Content-Type: application/json" -d "{\"declineRate\":0.0}"
 ```
 
@@ -630,42 +683,54 @@ curl -X POST http://localhost:8090/admin/mode -H "Content-Type: application/json
 The circuit breaker protects the order-service -> gateway call. Configuration recap:
 sliding window 5, opens at 60% failure, stays open 10 s, half-open allows 2 trial calls.
 
+#### 11.0 Watch the order-service logs in another terminal
 ```cmd
-:: 11.0 Watch the order-service logs in another terminal
 docker compose logs -f order-service
 ```
 
+#### 11.1 Force 100% technical failure (503) at the gateway
 ```cmd
-:: 11.1 Force 100% technical failure (503) at the gateway
 curl -X POST http://localhost:8090/admin/mode -H "Content-Type: application/json" -d "{\"failureRate\":1.0}"
 ```
 
+#### 11.2 Fire several card payments; each retries 3x, then the breaker OPENS
+- (make fresh orders first; reuse the loop or run a few by hand)
 ```cmd
-:: 11.2 Fire several card payments; each retries 3x, then the breaker OPENS
-::   (make fresh orders first; reuse the loop or run a few by hand)
 curl -X POST http://localhost:8000/orders -H "Content-Type: application/json" -H "Authorization: Bearer %USER_TOKEN%" -d "{\"eventId\":1}"
-curl -i -X POST http://localhost:8000/orders/<id>/pay -H "Content-Type: application/json" -H "Authorization: Bearer %USER_TOKEN%" -d "{\"paymentMethod\":\"CREDIT_CARD\",\"amount\":120.00}"
-::   In the logs: 3 retry attempts per call (exponential backoff), then after the window
-::   fills with failures the breaker opens and calls FAIL FAST (no gateway hit) via fallback.
-::   Response: error indicating the payment service is unavailable.
 ```
-
 ```cmd
-:: 11.3 Recover; set failure back to 0
+curl -i -X POST http://localhost:8000/orders/<id>/pay -H "Content-Type: application/json" -H "Authorization: Bearer %USER_TOKEN%" -d "{\"paymentMethod\":\"CREDIT_CARD\",\"amount\":120.00}"
+```
+- In the logs: 3 retry attempts per call (exponential backoff), then after the window
+- fills with failures the breaker opens and calls FAIL FAST (no gateway hit) via fallback.
+- Response: error indicating the payment service is unavailable.
+
+#### 11.3 Recover; set failure back to 0
+```cmd
 curl -X POST http://localhost:8090/admin/mode -H "Content-Type: application/json" -d "{\"failureRate\":0.0}"
-::   After ~10s the breaker goes HALF-OPEN, allows 2 trial calls; on success it CLOSES.
-::   Fire one more payment and watch it succeed in the logs.
+```
+- After ~10s the breaker goes HALF-OPEN, allows 2 trial calls; on success it CLOSES.
+- Fire one more payment and watch it succeed in the logs.
+```cmd
 curl -X POST http://localhost:8000/orders -H "Content-Type: application/json" -H "Authorization: Bearer %USER_TOKEN%" -d "{\"eventId\":1}"
+```
+```cmd
 curl -X POST http://localhost:8000/orders/<id>/pay -H "Content-Type: application/json" -H "Authorization: Bearer %USER_TOKEN%" -d "{\"paymentMethod\":\"CREDIT_CARD\",\"amount\":120.00}"
 ```
 
+#### 11.4 Timeout-driven trip; make the gateway slower than the 3s TimeLimiter
 ```cmd
-:: 11.4 Timeout-driven trip; make the gateway slower than the 3s TimeLimiter
 curl -X POST http://localhost:8090/admin/mode -H "Content-Type: application/json" -d "{\"latencyMs\":8000}"
+```
+```cmd
 curl -X POST http://localhost:8000/orders -H "Content-Type: application/json" -H "Authorization: Bearer %USER_TOKEN%" -d "{\"eventId\":1}"
+```
+```cmd
 curl -i -X POST http://localhost:8000/orders/<id>/pay -H "Content-Type: application/json" -H "Authorization: Bearer %USER_TOKEN%" -d "{\"paymentMethod\":\"CREDIT_CARD\",\"amount\":120.00}"
-::   The call exceeds the time limit -> counts as a failure -> contributes to opening the breaker.
-:: restore:
+```
+- The call exceeds the time limit -> counts as a failure -> contributes to opening the breaker.
+- restore:
+```cmd
 curl -X POST http://localhost:8090/admin/mode -H "Content-Type: application/json" -d "{\"latencyMs\":100}"
 ```
 
@@ -687,24 +752,24 @@ curl -X POST http://localhost:8090/admin/mode -H "Content-Type: application/json
 Proves the atomic DB decrement: you can never sell more tickets than exist, even
 across the two load-balanced event-service instances sharing one database.
 
+#### 12.1 Create an event with exactly 1 ticket
 ```cmd
-:: 12.1 Create an event with exactly 1 ticket
 curl -X POST http://localhost:8000/events -H "Content-Type: application/json" -H "Authorization: Bearer %ADMIN_TOKEN%" -d "{\"name\":\"OneSeat\",\"eventDate\":\"2026-12-01T20:00:00\",\"price\":50.00,\"availableQuantity\":1}"
-::   note its id (say 2)
 ```
+- note its id (say 2)
 
+#### 12.2 Reserve it twice in a row; second must 409
 ```cmd
-:: 12.2 Reserve it twice in a row; second must 409
 curl -i -X POST http://localhost:8000/orders -H "Content-Type: application/json" -H "Authorization: Bearer %USER_TOKEN%" -d "{\"eventId\":2}"
-::   EXPECT 201 (ticket taken)
-curl -i -X POST http://localhost:8000/orders -H "Content-Type: application/json" -H "Authorization: Bearer %USER_TOKEN%" -d "{\"eventId\":2}"
-::   EXPECT 409 Conflict: {"error":"No tickets available for event: 2"}
 ```
+- EXPECT 201 (ticket taken)
+```cmd
+curl -i -X POST http://localhost:8000/orders -H "Content-Type: application/json" -H "Authorization: Bearer %USER_TOKEN%" -d "{\"eventId\":2}"
+```
+- EXPECT 409 Conflict: {"error":"No tickets available for event: 2"}
 
-```cmd
-:: 12.3 Concurrent burst (PowerShell); fire 10 reservations at a 5-seat event,
-::   exactly 5 should succeed, 5 should 409. Create a 5-seat event first (id=3).
-```
+#### 12.3 Concurrent burst (PowerShell); fire 10 reservations at a 5-seat event,
+`exactly 5 should succeed, 5 should 409. Create a 5-seat event first (id=3).`
 
 PowerShell concurrency burst:
 
@@ -745,53 +810,78 @@ wait
 Three layers are idempotent: the gateway (by idempotency key), the order-payment
 (by order status), and the notification consumer (by orderId primary key).
 
+#### 13.1 Pay the same order twice; second is a no-op, not a double charge
 ```cmd
-:: 13.1 Pay the same order twice; second is a no-op, not a double charge
 curl -X POST http://localhost:8000/orders -H "Content-Type: application/json" -H "Authorization: Bearer %USER_TOKEN%" -d "{\"eventId\":1}"
-curl -X POST http://localhost:8000/orders/<id>/pay -H "Content-Type: application/json" -H "Authorization: Bearer %USER_TOKEN%" -d "{\"paymentMethod\":\"CREDIT_CARD\",\"amount\":120.00}"
-::   EXPECT: {"orderStatus":"CONFIRMED",...}
-curl -X POST http://localhost:8000/orders/<id>/pay -H "Content-Type: application/json" -H "Authorization: Bearer %USER_TOKEN%" -d "{\"paymentMethod\":\"CREDIT_CARD\",\"amount\":120.00}"
-::   EXPECT: {"orderStatus":"CONFIRMED","message":"Pagamento já confirmado."}  <- guarded no-op
 ```
+```cmd
+curl -X POST http://localhost:8000/orders/<id>/pay -H "Content-Type: application/json" -H "Authorization: Bearer %USER_TOKEN%" -d "{\"paymentMethod\":\"CREDIT_CARD\",\"amount\":120.00}"
+```
+- EXPECT: {"orderStatus":"CONFIRMED",...}
+```cmd
+curl -X POST http://localhost:8000/orders/<id>/pay -H "Content-Type: application/json" -H "Authorization: Bearer %USER_TOKEN%" -d "{\"paymentMethod\":\"CREDIT_CARD\",\"amount\":120.00}"
+```
+- EXPECT: {"orderStatus":"CONFIRMED","message":"Pagamento já confirmado."}  <- guarded no-op
 
+#### 13.2 The kill-test (mid-flight kill + retry -> one charge, one ticket, one email)
+- Slow the gateway so you can interrupt the call:
 ```cmd
-:: 13.2 The kill-test (mid-flight kill + retry -> one charge, one ticket, one email)
-::   Slow the gateway so you can interrupt the call:
 curl -X POST http://localhost:8090/admin/mode -H "Content-Type: application/json" -d "{\"latencyMs\":8000}"
-curl -X POST http://localhost:8000/orders -H "Content-Type: application/json" -H "Authorization: Bearer %USER_TOKEN%" -d "{\"eventId\":1}"
-::   Fire the payment, then press Ctrl+C after ~2 seconds (client abandons):
-curl -X POST http://localhost:8000/orders/<id>/pay -H "Content-Type: application/json" -H "Authorization: Bearer %USER_TOKEN%" -d "{\"paymentMethod\":\"CREDIT_CARD\",\"amount\":120.00}"
-::   ^C
-::   Reset latency and RETRY the exact same payment (same order -> same idempotency key):
-curl -X POST http://localhost:8090/admin/mode -H "Content-Type: application/json" -d "{\"latencyMs\":100}"
-curl -X POST http://localhost:8000/orders/<id>/pay -H "Content-Type: application/json" -H "Authorization: Bearer %USER_TOKEN%" -d "{\"paymentMethod\":\"CREDIT_CARD\",\"amount\":120.00}"
-::   Now verify exactly one of everything:
-curl http://localhost:8000/orders/<id> -H "Authorization: Bearer %USER_TOKEN%"        :: status CONFIRMED (once)
-curl http://localhost:8000/notifications -H "Authorization: Bearer %USER_TOKEN%"      :: one email row for this order
-curl http://localhost:8000/events -H "Authorization: Bearer %USER_TOKEN%"             :: quantity decremented exactly once
 ```
+```cmd
+curl -X POST http://localhost:8000/orders -H "Content-Type: application/json" -H "Authorization: Bearer %USER_TOKEN%" -d "{\"eventId\":1}"
+```
+- Fire the payment, then press Ctrl+C after ~2 seconds (client abandons):
+```cmd
+curl -X POST http://localhost:8000/orders/<id>/pay -H "Content-Type: application/json" -H "Authorization: Bearer %USER_TOKEN%" -d "{\"paymentMethod\":\"CREDIT_CARD\",\"amount\":120.00}"
+```
+```cmd
+^C
+```
+- Reset latency and RETRY the exact same payment (same order -> same idempotency key):
+```cmd
+curl -X POST http://localhost:8090/admin/mode -H "Content-Type: application/json" -d "{\"latencyMs\":100}"
+```
+```cmd
+curl -X POST http://localhost:8000/orders/<id>/pay -H "Content-Type: application/json" -H "Authorization: Bearer %USER_TOKEN%" -d "{\"paymentMethod\":\"CREDIT_CARD\",\"amount\":120.00}"
+```
+- Now verify exactly one of everything:
+```cmd
+curl http://localhost:8000/orders/<id> -H "Authorization: Bearer %USER_TOKEN%"
+```
+- status CONFIRMED (once)
+```cmd
+curl http://localhost:8000/notifications -H "Authorization: Bearer %USER_TOKEN%"
+```
+- one email row for this order
+```cmd
+curl http://localhost:8000/events -H "Authorization: Bearer %USER_TOKEN%"
+```
+- quantity decremented exactly once
 
 In `docker compose logs payment-gateway-mock` you'll see `Idempotent hit for key order-<id>` on the retry; the gateway returned the original charge instead of
 charging again.
 
-```cmd
-:: 13.3 Duplicate notification (consumer idempotency)
-::   Publish the same order.confirmed event twice via the RabbitMQ UI (see §14),
-::   or pay twice. EXPECT: /notifications still shows ONE row for that orderId,
-::   and the consumer logs "Email already sent ... skipping duplicate".
-```
+#### 13.3 Duplicate notification (consumer idempotency)
+`Publish the same order.confirmed event twice via the RabbitMQ UI (see §14)`\
+`or pay twice. EXPECT: /notifications still shows ONE row for that orderId`\
+`and the consumer logs "Email already sent ... skipping duplicate".`
 
 ---
 
 ## 14. Async / RabbitMQ / DLQ tests
 
+#### 14.1 Confirm an order and watch the event flow to the consumer
 ```cmd
-:: 14.1 Confirm an order and watch the event flow to the consumer
 curl -X POST http://localhost:8000/orders -H "Content-Type: application/json" -H "Authorization: Bearer %USER_TOKEN%" -d "{\"eventId\":1}"
-curl -X POST http://localhost:8000/orders/<id>/pay -H "Content-Type: application/json" -H "Authorization: Bearer %USER_TOKEN%" -d "{\"paymentMethod\":\"CREDIT_CARD\",\"amount\":120.00}"
-curl http://localhost:8000/notifications -H "Authorization: Bearer %USER_TOKEN%"
-::   EXPECT: a row appears for this order (produced asynchronously by the consumer)
 ```
+```cmd
+curl -X POST http://localhost:8000/orders/<id>/pay -H "Content-Type: application/json" -H "Authorization: Bearer %USER_TOKEN%" -d "{\"paymentMethod\":\"CREDIT_CARD\",\"amount\":120.00}"
+```
+```cmd
+curl http://localhost:8000/notifications -H "Authorization: Bearer %USER_TOKEN%"
+```
+- EXPECT: a row appears for this order (produced asynchronously by the consumer)
 
 **RabbitMQ management UI**; `http://localhost:15672` (tickets / tickets):
 
@@ -818,41 +908,45 @@ curl http://localhost:8000/notifications -H "Authorization: Bearer %USER_TOKEN%"
 
 ## 15. Load-balancing tests
 
+#### 15.1 Hit /whoami repeatedly; instances alternate (Nginx round-robin)
 ```cmd
-:: 15.1 Hit /whoami repeatedly; instances alternate (Nginx round-robin)
 curl http://localhost:8000/whoami -H "Authorization: Bearer %USER_TOKEN%"
-curl http://localhost:8000/whoami -H "Authorization: Bearer %USER_TOKEN%"
-curl http://localhost:8000/whoami -H "Authorization: Bearer %USER_TOKEN%"
-curl http://localhost:8000/whoami -H "Authorization: Bearer %USER_TOKEN%"
-::   EXPECT: {"instance":"event-service-1"} and {"instance":"event-service-2"} alternating
 ```
+```cmd
+curl http://localhost:8000/whoami -H "Authorization: Bearer %USER_TOKEN%"
+curl http://localhost:8000/whoami -H "Authorization: Bearer %USER_TOKEN%"
+curl http://localhost:8000/whoami -H "Authorization: Bearer %USER_TOKEN%"
+```
+- EXPECT: {"instance":"event-service-1"} and {"instance":"event-service-2"} alternating
 
+#### 15.2 Prove it survives an instance dying
 ```cmd
-:: 15.2 Prove it survives an instance dying
 docker compose stop event-service-2
-curl http://localhost:8000/whoami -H "Authorization: Bearer %USER_TOKEN%"
-curl http://localhost:8000/whoami -H "Authorization: Bearer %USER_TOKEN%"
-::   EXPECT: every response now says event-service-1; the system stays up
-docker compose start event-service-2
-::   after it's healthy, alternation resumes
 ```
+```cmd
+curl http://localhost:8000/whoami -H "Authorization: Bearer %USER_TOKEN%"
+```
+```cmd
+curl http://localhost:8000/whoami -H "Authorization: Bearer %USER_TOKEN%"
+```
+- EXPECT: every response now says event-service-1; the system stays up
+```cmd
+docker compose start event-service-2
+```
+- after it's healthy, alternation resumes
 
 ---
 
 ## 16. Observability checks
 
-```cmd
-:: 16.1 Prometheus is scraping every service
-::   Open in a browser:
-::   http://localhost:9090/targets
-::   EXPECT: event-service (x2), order-service, notification-service all "UP"
-```
+#### 16.1 Prometheus is scraping every service
+`- Open in a browser:`\
+`- http://localhost:9090/targets`\
+`- EXPECT: event-service (x2), order-service, notification-service all "UP"`
 
-```cmd
-:: 16.2 Query the custom business metric in Prometheus
-::   http://localhost:9090  ->  query box  ->  tickets_sold_total  ->  Execute
-::   EXPECT: a value that increments each time an order is CONFIRMED
-```
+#### 16.2 Query the custom business metric in Prometheus
+`- http://localhost:9090  ->  query box  ->  tickets_sold_total  ->  Execute`\
+`- EXPECT: a value that increments each time an order is CONFIRMED`
 
 PromQL queries to try in Prometheus or Grafana:
 
@@ -863,19 +957,17 @@ PromQL queries to try in Prometheus or Grafana:
 | Error rate (5xx/s) | `rate(http_server_requests_seconds_count{status=~"5.."}[1m])`             |
 | Tickets sold       | `tickets_sold_total`                                                      |
 
+#### 16.3 Confirm logs are structured JSON
 ```cmd
-:: 16.3 Confirm logs are structured JSON
 docker compose logs --tail 20 order-service
-::   EXPECT: each line is a JSON object with "@timestamp","level","message", and a
-::   "correlationId" field (per-request trace id)
 ```
+- EXPECT: each line is a JSON object with "@timestamp","level","message", and a
+- "correlationId" field (per-request trace id)
 
-```cmd
-:: 16.4 Grafana
-::   http://localhost:3000  (admin / admin)
-::   Connections -> Data sources -> Prometheus should be pre-provisioned and "working".
-::   Build panels with the PromQL above, or view your saved dashboard.
-```
+#### 16.4 Grafana
+`http://localhost:3000  (admin / admin)`\
+`Connections -> Data sources -> Prometheus should be pre-provisioned and "working".`\
+`Build panels with the PromQL above, or view your saved dashboard.`
 
 ---
 
@@ -896,43 +988,47 @@ Every non-2xx you can intentionally produce, and how:
 | `500 Internal Server Error` | unhandled server error       | (should not occur in normal tests; indicates a bug)         |
 | `503 Service Unavailable`   | dependency failed            | set mock `failureRate:1.0`, observe gateway-call failures |
 
+#### 17.1 400; malformed JSON body
 ```cmd
-:: 17.1 400; malformed JSON body
 curl -i -X POST http://localhost:8000/orders -H "Content-Type: application/json" -H "Authorization: Bearer %USER_TOKEN%" -d "{\"eventId\":}"
-::   EXPECT: 400 Bad Request
 ```
+- EXPECT: 400 Bad Request
 
+#### 17.2 404; pay an order that doesn't exist
 ```cmd
-:: 17.2 404; pay an order that doesn't exist
 curl -i -X POST http://localhost:8000/orders/99999/pay -H "Content-Type: application/json" -H "Authorization: Bearer %USER_TOKEN%" -d "{\"paymentMethod\":\"CREDIT_CARD\",\"amount\":1.00}"
-::   EXPECT: 404 (order not found)   [known smell: when the breaker is involved this can
-::   surface as a generic 'service unavailable'; see the report's limitations section]
 ```
+- EXPECT: 404 (order not found)   [known smell: when the breaker is involved this can
+- surface as a generic 'service unavailable'; see the report's limitations section]
 
+#### 17.3 409; reserve a sold-out event (after exhausting stock)
 ```cmd
-:: 17.3 409; reserve a sold-out event (after exhausting stock)
 curl -i -X POST http://localhost:8000/orders -H "Content-Type: application/json" -H "Authorization: Bearer %USER_TOKEN%" -d "{\"eventId\":2}"
-::   EXPECT: 409 Conflict
 ```
+- EXPECT: 409 Conflict
 
 ---
 
 ## 18. Reset & teardown
 
+- Reset payment mock to clean defaults (no fault injection)
 ```cmd
-:: Reset payment mock to clean defaults (no fault injection)
 curl -X POST http://localhost:8090/admin/mode -H "Content-Type: application/json" -d "{\"failureRate\":0.0,\"latencyMs\":100,\"declineRate\":0.0,\"webhookDelayMs\":5000,\"confirmRate\":1.0}"
-
-:: Stop everything, keep data
+```
+- Stop everything, keep data
+```cmd
 docker compose stop
-
-:: Stop and remove containers + network, KEEP volumes (DB persists)
+```
+- Stop and remove containers + network, KEEP volumes (DB persists)
+```cmd
 docker compose down
-
-:: Full wipe; fresh database, IDs restart at 1, admin re-seeded
+```
+- Full wipe; fresh database, IDs restart at 1, admin re-seeded
+```cmd
 docker compose down -v
-
-:: Rebuild from scratch
+```
+- Rebuild from scratch
+```cmd
 docker compose up --build -d
 ```
 
